@@ -742,10 +742,10 @@ class ImageViewer(QtWidgets.QGraphicsView):
 			print('<ImageViewer> perturbing latent at ({}, {}) with class {}'.format(gridCoords.x(), gridCoords.y(), latentCluster))
 			sourceX = self.sampledLatentPos.x()
 			sourceY = self.sampledLatentPos.y()
-			output, undoCount = np.asarray(tf_manager.perturbLatent(gridCoords.x(), gridCoords.y(), sourceX, sourceY, alpha)._getvalue())
+			output, undoCount = np.asarray(tf_manager.perturb_latent(gridCoords.x(), gridCoords.y(), sourceX, sourceY, alpha)._getvalue())
 		else:
 			print('<ImageViewer> dropped latent of class {} at ({}, {})'.format(latentCluster, gridCoords.x(), gridCoords.y()))
-			output, undoCount = np.asarray(tf_manager.putLatent(gridCoords.x(), gridCoords.y(), latentCluster)._getvalue())
+			output, undoCount = np.asarray(tf_manager.put_latent(gridCoords.x(), gridCoords.y(), latentCluster)._getvalue())
 		self.undoCountUpdated.emit(undoCount)
 		self.updateImage(output)
 
@@ -753,7 +753,7 @@ class ImageViewer(QtWidgets.QGraphicsView):
 		mode = 'similar' if self.useSimilarLatents else 'identical'
 		#mode = 'cluster' #if self.useSimilarLatents else 'identical'
 		print('<ImageViewer> replaceLatentRegion at ({}, {}) of size {}x{} from ({}, {}) with {}'.format(startX, startY, width, height, sampleX, sampleY, mode))
-		output, undoCount = np.asarray(tf_manager.pasteLatents(self.sampledLatent, startX, startY, width, height, sampleX, sampleY, mode)._getvalue())
+		output, undoCount = np.asarray(tf_manager.paste_latents(self.sampledLatent, startX, startY, width, height, sampleX, sampleY, mode)._getvalue())
 		self.undoCountUpdated.emit(undoCount)
 		self.updateImage(output)
 
@@ -770,7 +770,7 @@ class ImageViewer(QtWidgets.QGraphicsView):
 		if not self.hasImage():
 			return
 		if not showMerging and self._emptyUnmerged:
-			output = np.asarray(tf_manager.getUnmergedOutput()._getvalue())
+			output = np.asarray(tf_manager.get_unmerged_output()._getvalue())
 			pixmap = self.pixmapFromArray(output)
 			self._imageUnmerged.setPixmap(pixmap)
 			self._emptyUnmerged = False
@@ -784,7 +784,7 @@ class ImageViewer(QtWidgets.QGraphicsView):
 			return
 		if showClusters and self._emptyClusters:
 			print('<ImageViewer> toggle clusters')
-			output = np.asarray(tf_manager.getClusterOutput()._getvalue())
+			output = np.asarray(tf_manager.get_cluster_output()._getvalue())
 			rect = self.getImageDims()
 			upsampledOutput = output.repeat(rect.height()//output.shape[0], axis=0).repeat(rect.width()//output.shape[1], axis=1)
 			pixmap = self.pixmapFromArray(upsampledOutput)
@@ -803,7 +803,7 @@ class ImageViewer(QtWidgets.QGraphicsView):
 		force an update of the texture from manager
 		"""
 		print('<ImageViewer> refresh')
-		output, gridShape = np.asarray(tf_manager.getOutput()._getvalue())
+		output, gridShape = np.asarray(tf_manager.get_output()._getvalue())
 		self.updateGridShape(np.asarray(gridShape))
 		self.updateImage(output)
 
@@ -832,7 +832,7 @@ class ImageViewer(QtWidgets.QGraphicsView):
 			return
 		print('<ImageViewer> randomizing {}x{} grid'.format(h, w))
 
-		output, gridShape, undoCount = tf_manager.randomizeGrid(h, w)._getvalue()
+		output, gridShape, undoCount = tf_manager.randomize_grid(h, w)._getvalue()
 		self.undoCountUpdated.emit(undoCount)
 		self.updateGridShape(np.asarray(gridShape))
 		self.updateImage(np.asarray(output), fitToView=True)
@@ -883,8 +883,8 @@ class ImageViewer(QtWidgets.QGraphicsView):
 		self.mergeLevel = level
 		self.latentSize = latentSize
 		print('<ImageViewer> updating new merge level to {}, latentSize {}'.format(self.mergeLevel, self.latentSize))
-		tf_manager.setMergeLevel(self.mergeLevel, self.latentSize)
-		output, gridShape = np.asarray(tf_manager.getOutput()._getvalue())
+		tf_manager.set_merge_level(self.mergeLevel, self.latentSize)
+		output, gridShape = np.asarray(tf_manager.get_output()._getvalue())
 		self.updateGridShape(np.asarray(gridShape))
 		self.updateImage(output, fitToView=True)
 
@@ -1029,7 +1029,18 @@ class ImageViewer(QtWidgets.QGraphicsView):
 		"""
 		save latents to file. currently pointless, as loading from file is not implemented.
 		"""
-		tf_manager.saveLatents()
+		tf_manager.save_latents()
+
+	def loadLatents(self):
+		filename, _ = QFileDialog.getOpenFileName(self, 'Open file', str(Path.home()) + '\Desktop')
+
+		if filename is None or filename == "":
+			return
+
+		output, gridShape, undoCount = tf_manager.load_latents(filename)._getvalue()
+		self.undoCountUpdated.emit(undoCount)
+		self.updateGridShape(np.asarray(gridShape))
+		self.updateImage(np.asarray(output), fitToView=True)
 
 	def saveImage(self):
 		filename = QFileDialog.getSaveFileName(self, 'Save image as...', str(Path.home())+'\Desktop')
@@ -1181,8 +1192,15 @@ class MainWidget(QtWidgets.QWidget):
 		self.btnSaveLatents.setIcon(QtGui.QIcon(iconFolder + '/icon_download_latents.png'))
 		self.btnSaveLatents.setToolTip('Save Latents')
 		self.btnSaveLatents.setIconSize(QSize(32, 32))
-		self.btnSaveLatents.setEnabled(False)
+		self.btnSaveLatents.setEnabled(True)
 		self.btnSaveLatents.clicked.connect(self.viewer.saveLatents)
+
+		self.btnLoadLatents = QToolButton(self)
+		self.btnLoadLatents.setIcon(QtGui.QIcon(QtGui.QIcon(iconFolder + '/icon_download_latents.png').pixmap(32, 32).transformed(QTransform().rotate(180))))
+		self.btnLoadLatents.setToolTip('Load Latents')
+		self.btnLoadLatents.setIconSize(QSize(32, 32))
+		self.btnLoadLatents.setEnabled(True)
+		self.btnLoadLatents.clicked.connect(self.viewer.loadLatents)
 
 		self.btnUndo = QToolButton(self)
 		icon = QIcon()
@@ -1346,6 +1364,7 @@ class MainWidget(QtWidgets.QWidget):
 		HBlayout.addWidget(self.btnGuidance)
 		HBlayout.addWidget(self.btnResize)
 		HBlayout.addWidget(self.btnSaveLatents)
+		HBlayout.addWidget(self.btnLoadLatents)
 		HBlayout.addWidget(self.infoTextBox)
 		HBlayout.addWidget(self.btnClusters)
 		HBlayout.addWidget(self.btnMerged)
@@ -1365,9 +1384,9 @@ class MainWidget(QtWidgets.QWidget):
 
 		clearLayout(widgetLayout)
 
-		latent_images = np.asarray(tf_manager.getLatentImages()._getvalue())
+		latent_images = np.asarray(tf_manager.get_latent_images()._getvalue())
 
-		latent_colors = np.asarray(tf_manager.getDominantClusterColors()._getvalue())
+		latent_colors = np.asarray(tf_manager.get_dominant_cluster_colors()._getvalue())
 		latent_hues = [ colorsys.rgb_to_hsv(r/255.0, g/255.0, b/255.0)[0] for r, g, b in latent_colors ]
 		sorting = np.argsort(latent_hues)
 
@@ -1384,7 +1403,7 @@ class MainWidget(QtWidgets.QWidget):
 
 	def setDataset(self):
 		#request available datasets from server
-		datasets, currentDataset = np.asarray(tf_manager.findDatasets()._getvalue())
+		datasets, currentDataset = np.asarray(tf_manager.find_available_datasets()._getvalue())
 		dataset, ok = GetDatasetDialog.getValue(datasets, currentDataset)
 
 		if not ok or dataset == currentDataset:
@@ -1489,24 +1508,25 @@ def getServer(ip='', port=8080):
 	print('Attempting to connect to TensorFlow manager at {}:{}...'.format(ip, port))
 	server = Server(address=(ip, port), authkey=b'tilegan') #localhost
 	server.register('sampleFromCluster')
-	server.register('findDatasets')
+	server.register('find_available_datasets')
 	server.register('initDataset')
-	server.register('getLatentImages')
+	server.register('get_latent_images')
 	server.register('getLatentAverages')
-	server.register('getDominantClusterColors')
+	server.register('get_dominant_cluster_colors')
 	server.register('getUpsampled')
-	server.register('putLatent')
-	server.register('perturbLatent')
-	server.register('getOutput')
-	server.register('getUnmergedOutput')
-	server.register('getClusterOutput')
+	server.register('put_latent')
+	server.register('perturb_latent')
+	server.register('get_output')
+	server.register('get_unmerged_output')
+	server.register('get_cluster_output')
 	server.register('getClusterAt')
-	server.register('pasteLatents')
-	server.register('saveLatents')
+	server.register('paste_latents')
+	server.register('save_latents')
+	server.register('load_latents')
 	server.register('improveLatents')
-	server.register('setMergeLevel')
+	server.register('set_merge_level')
 	server.register('undo')
-	server.register('randomizeGrid')
+	server.register('randomize_grid')
 	server.register('deadLeaves')
 	connected = False
 	attempts = 0

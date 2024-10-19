@@ -726,6 +726,8 @@ class Network:
             minibatch_size = num_items
         key = str([list(sorted(dynamic_kwargs.items())), num_gpus, out_mul, out_add, out_shrink, out_dtype])
 
+        self._run_cache = {}
+
         # Build graph.
         if key not in self._run_cache:
             with absolute_name_scope(self.scope + '/Run'), tf.control_dependencies(None):
