@@ -919,7 +919,7 @@ class ImageViewer(QtWidgets.QGraphicsView):
 		return True
 
 	def update(self):
-		output, descriptorGrid, gridShape, undoCount = np.asarray(tf_manager.getUpsampled(self.guidanceMap)._getvalue())
+		output, descriptorGrid, gridShape, undoCount = np.asarray(tf_manager.get_upsampled(self.guidanceMap)._getvalue())
 		self.updateImage(output, fitToView=True)
 		self.undoCountUpdated.emit(undoCount)
 		self.updateGridShape(gridShape)
@@ -939,7 +939,7 @@ class ImageViewer(QtWidgets.QGraphicsView):
 		# TODO don't allow arbitrarily big images
 		self.guidanceViewer.setImage(self.pixmapFromArray(self.defaultGuidanceMap))
 
-		output, descriptorGrid, gridShape, undoCount = np.asarray(tf_manager.getUpsampled(self.guidanceMap)._getvalue())
+		output, descriptorGrid, gridShape, undoCount = np.asarray(tf_manager.get_upsampled(self.guidanceMap)._getvalue())
 		self.undoCountUpdated.emit(undoCount)
 		self.updateGridShape(gridShape)
 		self.updateImage(output, fitToView=True)
@@ -1410,7 +1410,7 @@ class MainWidget(QtWidgets.QWidget):
 			return
 
 		self.dataset = dataset
-		tf_manager.initDataset(self.dataset)
+		tf_manager.load_dataset(self.dataset)
 		self.createLatentPicker(self.LatentPickerLayout)
 
 	def setUndoEnabled(self, undoCount):
@@ -1509,17 +1509,17 @@ def getServer(ip='', port=8080):
 	server = Server(address=(ip, port), authkey=b'tilegan') #localhost
 	server.register('sampleFromCluster')
 	server.register('find_available_datasets')
-	server.register('initDataset')
+	server.register('load_dataset')
 	server.register('get_latent_images')
-	server.register('getLatentAverages')
+	server.register('get_latent_averages')
 	server.register('get_dominant_cluster_colors')
-	server.register('getUpsampled')
+	server.register('get_upsampled')
 	server.register('put_latent')
 	server.register('perturb_latent')
 	server.register('get_output')
 	server.register('get_unmerged_output')
 	server.register('get_cluster_output')
-	server.register('getClusterAt')
+	server.register('get_cluster_at')
 	server.register('paste_latents')
 	server.register('save_latents')
 	server.register('load_latents')

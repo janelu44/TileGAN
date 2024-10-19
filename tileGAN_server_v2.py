@@ -35,13 +35,13 @@ def parse_dataset(dataset_path):
         return None
 
     files = glob.glob(os.path.join(dataset_path, '*clusters.hdf5'))
-    clusters_file = None if len(files) == 0 else files[0]
+    clusters_file = f'{dataset_path}_clusters.hdf5' if len(files) == 0 else files[0]
 
     files = glob.glob(os.path.join(dataset_path, '*kmeans.joblib'))
-    kmeans_file = None if len(files) == 0 else files[0]
+    kmeans_file = f'{dataset_path}_kmeans.joblib' if len(files) == 0 else files[0]
 
     files = glob.glob(os.path.join(dataset_path, '*ann.bin'))
-    ann_file = None if len(files) == 0 else files[0]
+    ann_file = f'{dataset_path}_ann.bin' if len(files) == 0 else files[0]
 
     return network_file, descriptors_file, clusters_file, kmeans_file, ann_file
 
@@ -49,13 +49,14 @@ def parse_dataset(dataset_path):
 class TileGanManager:
     def __init__(self, ):
         self.available_datasets = []
+        self.selected_dataset = None
+
         self.find_available_datasets()
         if len(self.available_datasets) == 0:
             print(f'Found no datasets')
             return
 
         print(f'Found datasets: {self.available_datasets}')
-        self.selected_dataset = self.available_datasets[0]
 
         # Network
         self.network_file = None
@@ -79,7 +80,7 @@ class TileGanManager:
         # K-Means
         self.kmeans = None
 
-        self.load_dataset(self.selected_dataset)
+        self.load_dataset(self.available_datasets[0])
 
         # Params
         self.merge_level = 2
@@ -121,7 +122,8 @@ class TileGanManager:
                 self.intermediate_latents,
                 self.intermediate_latent_grid,
                 self.output,
-                self.guidance_image
+                self.guidance_image,
+                self.selected_dataset
             ), f)
         print('Saved instance.')
 
@@ -145,11 +147,12 @@ class TileGanManager:
             self.intermediate_latent_grid = instance[11]
             self.output = instance[12]
             self.guidance_image = instance[13]
+            self.selected_dataset = instance[14]
         print('Loaded instance.')
 
     def find_available_datasets(self, dataset_dir='data'):
         self.available_datasets = [f.name for f in os.scandir(dataset_dir) if f.is_dir()]
-        return self.available_datasets
+        return self.available_datasets, self.selected_dataset
 
     def load_dataset(self, dataset_name, dataset_dir='data'):
         print(f'Loading dataset: {dataset_name}')
@@ -157,6 +160,8 @@ class TileGanManager:
         if parsed is None:
             print(f'> Failed to load dataset.')
             return
+
+        self.selected_dataset = dataset_name
 
         network_file, descriptors_file, clusters_file, kmeans_file, ann_file = parsed
 
@@ -433,6 +438,59 @@ class TileGanManager:
         self._save_instance()
         return np.squeeze(output)
 
+    def get_upsampled(self, image):
+        t = self.t_size
+        ls = self.latent_size
+
+        if image.shape[2] > 3:
+            image = image[:, :, :3]
+
+        img_h = image.shape[0]
+        img_w = image.shape[1]
+
+        channels = 3 if len(image.shape) > 2 else 1
+
+        descriptor_size = t * t * channels
+
+        total_pad = (2 ** self.merge_level) - ls
+        total_img_pad = total_pad * (t // (2 ** self.merge_level))
+        g_size = t - total_img_pad
+
+        self.height = (img_h - total_img_pad) // g_size
+        self.width = (img_w - total_img_pad) // g_size
+
+        self.guidance_image = image[:self.height * g_size, :self.width * g_size, :]
+
+        tile_descriptors = np.zeros((self.height * self.width, descriptor_size))
+        self.cluster_grid = np.zeros((self.height * ls, self.width * ls), dtype=np.uint8)
+
+        for y in range(self.height):
+            for x in range(self.width):
+                tile = image[y * g_size: y * g_size + t, x * g_size: x * g_size + t, :]
+                tile_descriptors[y * self.width + x, :] = np.ravel(tile)
+
+        all_indices, all_distances = self.ann_numbers.knn_query(tile_descriptors, 3)
+
+        latent_list = []
+        for i in range(self.height * self.width):
+            indices = all_indices[i, :]
+            random_idx = np.random.randint(len(indices))
+            idx = int(indices[random_idx])
+            latent_list.append(self.latent_lookup[idx])
+            y = i // self.width
+            x = i % self.width
+            self.cluster_grid[y * ls: (y + 1) * ls, x * ls: (x + 1) * ls] = int(self.cluster_lookup[idx])
+
+        self.latents = np.asarray(latent_list)
+
+        self.intermediate_latents = self.calculate_intermediate_latents(self.latents)
+        self.get_output_from_intermediate_latents(self.intermediate_latents)
+
+        grid_h = self.height * ls
+        grid_w = self.width * ls
+
+        return self.output, None, (grid_h, grid_w, ls, self.merge_level), 0
+
     def randomize_grid(self, width, height):
         self.guidance_image = None
         self.randomize_latents(width, height, repeat=False)
@@ -652,7 +710,7 @@ class TileGanManager:
 
     def get_output(self):
         self.calculate_output_image(self.intermediate_latent_grid)
-        return self.output
+        return self.output, (self.intermediate_latent_grid.shape[2], self.intermediate_latent_grid.shape[3], self.latent_size, self.latent_size)
 
     def get_unmerged_output(self):
         return self.calculate_unmerged_output_image(self.intermediate_latent_grid)
@@ -665,6 +723,9 @@ class TileGanManager:
 
     def get_left_padding(self):
         return (2 ** self.merge_level - self.latent_size) // 2
+
+    def get_cluster_at(self, source_y, source_x):
+        return self.cluster_grid[source_y, source_x]
 
     def save_latents(self):
         grid_h = self.intermediate_latent_grid.shape[2]
@@ -697,15 +758,15 @@ if __name__ == '__main__':
     server_process = Server(address=('', port), authkey=b'tilegan')
     # server_process.register('sampleFromCluster', manager.sampleFromCluster)
     server_process.register('find_available_datasets', manager.find_available_datasets)
-    # server_process.register('initDataset', manager.initDataset)
+    server_process.register('load_dataset', manager.load_dataset)
     server_process.register('get_latent_images', manager.get_latent_images)
-    # server_process.register('getLatentAverages', manager.getLatentAverages)
+    server_process.register('get_latent_averages', manager.get_latent_averages)
     server_process.register('get_dominant_cluster_colors', manager.get_dominant_cluster_colors)
     server_process.register('get_output', manager.get_output)
     server_process.register('get_unmerged_output', manager.get_unmerged_output)
     server_process.register('get_cluster_output', manager.get_cluster_output)
-    # server_process.register('getClusterAt', manager.getClusterAt)
-    # server_process.register('getUpsampled', manager.getUpsampled)
+    server_process.register('get_cluster_at', manager.get_cluster_at)
+    server_process.register('get_upsampled', manager.get_upsampled)
     server_process.register('put_latent', manager.put_latent)
     server_process.register('perturb_latent', manager.perturb_latent)
     server_process.register('paste_latents', manager.paste_latents)
