@@ -838,6 +838,19 @@ class ImageViewer(QtWidgets.QGraphicsView):
 		self.updateImage(np.asarray(output), fitToView=True)
 
 
+	def noise(self):
+		output, gridShape, undoCount = tf_manager.noise()._getvalue()
+		self.undoCountUpdated.emit(undoCount)
+		self.updateGridShape(np.asarray(gridShape))
+		self.updateImage(np.asarray(output), fitToView=True)
+
+	def smooth(self):
+		output, gridShape, undoCount = tf_manager.smooth()._getvalue()
+		self.undoCountUpdated.emit(undoCount)
+		self.updateGridShape(np.asarray(gridShape))
+		self.updateImage(np.asarray(output), fitToView=True)
+
+
 	def deadLeaves(self):
 		"""
 		generate a randomized latent grid with larger coherent regions using "dead leaves" algorithm
@@ -1237,6 +1250,18 @@ class MainWidget(QtWidgets.QWidget):
 		self.btnSetLvl.setToolTip('Set Merge Level')
 		self.btnSetLvl.clicked.connect(self.viewer.setMergeLevel)
 
+		self.btnNoise = QToolButton(self)
+		self.btnNoise.setIcon(QtGui.QIcon(iconFolder + '/icon_merged.png'))
+		self.btnNoise.setIconSize(QSize(32, 32))
+		self.btnNoise.setToolTip('Apply Gaussian Noise')
+		self.btnNoise.clicked.connect(self.viewer.noise)
+
+		self.btnSmooth = QToolButton(self)
+		self.btnSmooth.setIcon(QtGui.QIcon(iconFolder + '/icon_unmerged.png'))
+		self.btnSmooth.setIconSize(QSize(32, 32))
+		self.btnSmooth.setToolTip('Apply Gaussian Smoothing')
+		self.btnSmooth.clicked.connect(self.viewer.smooth)
+
 		self.btnMerged = QToolButton(self)
 		self.btnMerged.setCheckable(True)
 		self.btnMerged.setEnabled(False)
@@ -1353,21 +1378,23 @@ class MainWidget(QtWidgets.QWidget):
 		HBlayout.setAlignment(QtCore.Qt.AlignLeft)
 		HBlayout.addWidget(self.btnDataset)
 
-		HBlayout.addWidget(self.btnUndo)
+		# HBlayout.addWidget(self.btnUndo)
 		HBlayout.addWidget(self.btnRandomize)
-		HBlayout.addWidget(self.btnDeadLeaves)
-		HBlayout.addWidget(self.btnImprove)
+		HBlayout.addWidget(self.btnNoise)
+		HBlayout.addWidget(self.btnSmooth)
+		# HBlayout.addWidget(self.btnDeadLeaves)
+		# HBlayout.addWidget(self.btnImprove)
 		HBlayout.addWidget(self.btnSetLvl)
-		HBlayout.addWidget(self.btnRefresh)
-		HBlayout.addWidget(self.btnLoad)
+		# HBlayout.addWidget(self.btnRefresh)
+		# HBlayout.addWidget(self.btnLoad)
 		HBlayout.addWidget(self.btnSave)
-		HBlayout.addWidget(self.btnGuidance)
-		HBlayout.addWidget(self.btnResize)
+		# HBlayout.addWidget(self.btnGuidance)
+		# HBlayout.addWidget(self.btnResize)
 		HBlayout.addWidget(self.btnSaveLatents)
 		HBlayout.addWidget(self.btnLoadLatents)
 		HBlayout.addWidget(self.infoTextBox)
 		HBlayout.addWidget(self.btnClusters)
-		HBlayout.addWidget(self.btnMerged)
+		# HBlayout.addWidget(self.btnMerged)
 		HBlayout.addWidget(self.btnGrid)
 		HBlayout.addWidget(self.btnIndicator)
 		HBlayout.addWidget(self.btnLatents)
@@ -1527,6 +1554,8 @@ def getServer(ip='', port=8080):
 	server.register('set_merge_level')
 	server.register('undo')
 	server.register('randomize_grid')
+	server.register('noise')
+	server.register('smooth')
 	server.register('deadLeaves')
 	connected = False
 	attempts = 0

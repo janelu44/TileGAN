@@ -9,6 +9,7 @@ from multiprocessing.managers import BaseManager
 from joblib import load
 from sklearn.cluster import KMeans
 from PIL import Image
+from scipy.ndimage import gaussian_filter
 
 import h5py
 import hnswlib
@@ -48,6 +49,29 @@ def parse_dataset(dataset_path):
 
 class TileGanManager:
     def __init__(self, ):
+
+        # Params
+        self.merge_level = 2
+        self.latent_depth = int(DEPTHS[self.merge_level - 1])
+        self.latent_size = 2
+        self.height = 0
+        self.width = 0
+        self.output_resolution = 0
+
+        # Outputs & intermediates
+        self.dominant_cluster_colors = []
+        self.cluster_grid = None
+        self.cluster_samples = None
+
+        self.latents = None
+
+        self.intermediate_latents = None
+        self.intermediate_latent_grid = None
+
+        self.output = None
+
+        self.guidance_image = None
+
         self.available_datasets = []
         self.selected_dataset = None
 
@@ -80,31 +104,11 @@ class TileGanManager:
         # K-Means
         self.kmeans = None
 
-        self.load_dataset(self.available_datasets[0])
-
-        # Params
-        self.merge_level = 2
-        self.latent_depth = int(DEPTHS[self.merge_level - 1])
-        self.latent_size = 2
-        self.height = 0
-        self.width = 0
-        self.output_resolution = 0
-
-        # Outputs & intermediates
-        self.dominant_cluster_colors = []
-        self.cluster_grid = None
-        self.cluster_samples = None
-
-        self.latents = None
-
-        self.intermediate_latents = None
-        self.intermediate_latent_grid = None
-
-        self.output = None
-
-        self.guidance_image = None
-
         self._load_instance()
+        if self.selected_dataset is None:
+            self.load_dataset(self.available_datasets[0])
+        else:
+            self.load_dataset(self.selected_dataset)
 
     def _save_instance(self):
         with open('instance.pkl', 'wb') as f:
@@ -216,6 +220,7 @@ class TileGanManager:
         print(f'\tDone!\n')
 
     def randomize_latents(self, height, width, repeat=False):
+        print('Randomizing latents...')
         self.height = height
         self.width = width
 
@@ -236,8 +241,10 @@ class TileGanManager:
             for x in np.arange(self.width):
                 for y in np.arange(self.height):
                     self.cluster_grid[y * ls: (y + 1) * ls, x * ls: (x + 1) * ls] = clusters[y * self.width + x]
+        print('\t> Done!')
 
     def calculate_intermediate_latents(self, latents):
+        print('Calculating intermediate latents...')
         if len(latents.shape) == 1:
             latents = np.expand_dims(latents, axis=0)
         if len(latents.shape) > 2:
@@ -259,7 +266,6 @@ class TileGanManager:
                     'resolution': size
                 }
                 gsa = network.clone_and_update("GsA", kwargs=kwargs, func='networks.G_new')
-
                 intermediate_latents, _ = gsa.run_with_session(
                     session,
                     latents,
@@ -271,7 +277,9 @@ class TileGanManager:
                     out_dtype=np.float32
                 )
 
+        print('\t> Done!')
         session.close()
+        print(f'\t> Intermediate latents: {intermediate_latents.shape}')
         return intermediate_latents
 
     def get_output_from_intermediate_latents(self, intermediate_latents):
@@ -289,6 +297,7 @@ class TileGanManager:
         return self.calculate_output_image(self.intermediate_latent_grid, update_all=True)
 
     def calculate_output_image(self, intermediate_latent_grid, start=(0, 0), end=(0, 0), update_all=False):
+        print('Calculating output...')
         sh = list(intermediate_latent_grid.shape)
         grid_h = sh[2]
         grid_w = sh[3]
@@ -376,6 +385,7 @@ class TileGanManager:
 
                 self.output = np.squeeze(self.output)
 
+        print('\t> Done!')
         session.close()
         self._save_instance()
         return self.output
@@ -500,6 +510,24 @@ class TileGanManager:
         self._save_instance()
 
         return self.output, (self.intermediate_latent_grid.shape[2], self.intermediate_latent_grid.shape[3], self.latent_size, self.merge_level), 0
+
+    def noise(self):
+        noise = np.random.normal(loc=0.0, scale=2.0, size=self.intermediate_latents.shape)
+        self.intermediate_latents += noise
+        self.get_output_from_intermediate_latents(self.intermediate_latents)
+
+        self._save_instance()
+
+        return self.output, (self.intermediate_latent_grid.shape[2], self.intermediate_latent_grid.shape[3], self.latent_size, self.merge_level), 0
+
+    def smooth(self):
+        self.intermediate_latents = gaussian_filter(self.intermediate_latents, sigma=(0, 0.5, 1, 1))
+        self.get_output_from_intermediate_latents(self.intermediate_latents)
+
+        self._save_instance()
+
+        return self.output, (self.intermediate_latent_grid.shape[2], self.intermediate_latent_grid.shape[3], self.latent_size, self.merge_level), 0
+
 
     def perturb_latent(self, pos_x, pos_y, source_x, source_y, alpha, random_latent=False, from_samples=False, use_cdf=True):
         ls = self.latent_size
@@ -775,6 +803,8 @@ if __name__ == '__main__':
     # server_process.register('improveLatents', manager.MRFLatents)
     server_process.register('set_merge_level', manager.set_merge_level)
     server_process.register('randomize_grid', manager.randomize_grid)
+    server_process.register('noise', manager.noise)
+    server_process.register('smooth', manager.smooth)
     # server_process.register('deadLeaves', manager.deadLeaves)
     # server_process.register('undo', manager.undo)
 
