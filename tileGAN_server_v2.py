@@ -9,7 +9,7 @@ from multiprocessing.managers import BaseManager
 from joblib import load
 from sklearn.cluster import KMeans
 from PIL import Image
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, convolve
 
 import h5py
 import hnswlib
@@ -528,6 +528,31 @@ class TileGanManager:
 
         return self.output, (self.intermediate_latent_grid.shape[2], self.intermediate_latent_grid.shape[3], self.latent_size, self.merge_level), 0
 
+    def sharpen(self):
+        kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+        sharpened_latents = np.zeros_like(self.intermediate_latents)
+
+        for i in range(self.intermediate_latents.shape[0]):
+            for j in range(self.intermediate_latents.shape[1]):
+                sharpened_latents[i, j] = convolve(self.intermediate_latents[i, j], kernel, mode='reflect')
+
+        self.intermediate_latents = sharpened_latents
+        self.get_output_from_intermediate_latents(self.intermediate_latents)
+
+        self._save_instance()
+
+        return self.output, (self.intermediate_latent_grid.shape[2], self.intermediate_latent_grid.shape[3], self.latent_size, self.merge_level), 0
+
+    def normalize(self):
+        mn = self.intermediate_latents.min()
+        mx = self.intermediate_latents.max()
+        self.intermediate_latents = (self.intermediate_latents - mn) / (mx - mn)
+        self.get_output_from_intermediate_latents(self.intermediate_latents)
+
+        self._save_instance()
+
+        return self.output, (self.intermediate_latent_grid.shape[2], self.intermediate_latent_grid.shape[3], self.latent_size, self.merge_level), 0
+
 
     def perturb_latent(self, pos_x, pos_y, source_x, source_y, alpha, random_latent=False, from_samples=False, use_cdf=True):
         ls = self.latent_size
@@ -805,6 +830,8 @@ if __name__ == '__main__':
     server_process.register('randomize_grid', manager.randomize_grid)
     server_process.register('noise', manager.noise)
     server_process.register('smooth', manager.smooth)
+    server_process.register('sharpen', manager.sharpen)
+    server_process.register('normalize', manager.normalize)
     # server_process.register('deadLeaves', manager.deadLeaves)
     # server_process.register('undo', manager.undo)
 

@@ -850,6 +850,17 @@ class ImageViewer(QtWidgets.QGraphicsView):
 		self.updateGridShape(np.asarray(gridShape))
 		self.updateImage(np.asarray(output), fitToView=True)
 
+	def sharpen(self):
+		output, gridShape, undoCount = tf_manager.sharpen()._getvalue()
+		self.undoCountUpdated.emit(undoCount)
+		self.updateGridShape(np.asarray(gridShape))
+		self.updateImage(np.asarray(output), fitToView=True)
+
+	def normalize(self):
+		output, gridShape, undoCount = tf_manager.normalize()._getvalue()
+		self.undoCountUpdated.emit(undoCount)
+		self.updateGridShape(np.asarray(gridShape))
+		self.updateImage(np.asarray(output), fitToView=True)
 
 	def deadLeaves(self):
 		"""
@@ -1262,6 +1273,18 @@ class MainWidget(QtWidgets.QWidget):
 		self.btnSmooth.setToolTip('Apply Gaussian Smoothing')
 		self.btnSmooth.clicked.connect(self.viewer.smooth)
 
+		self.btnSharpen = QToolButton(self)
+		self.btnSharpen.setIcon(QtGui.QIcon(iconFolder + '/icon_fix.png'))
+		self.btnSharpen.setIconSize(QSize(32, 32))
+		self.btnSharpen.setToolTip('Sharpen')
+		self.btnSharpen.clicked.connect(self.viewer.sharpen)
+
+		self.btnNormalize = QToolButton(self)
+		self.btnNormalize.setIcon(QtGui.QIcon(iconFolder + '/icon_refresh.png'))
+		self.btnNormalize.setIconSize(QSize(32, 32))
+		self.btnNormalize.setToolTip('Normalize')
+		self.btnNormalize.clicked.connect(self.viewer.normalize)
+
 		self.btnMerged = QToolButton(self)
 		self.btnMerged.setCheckable(True)
 		self.btnMerged.setEnabled(False)
@@ -1382,6 +1405,8 @@ class MainWidget(QtWidgets.QWidget):
 		HBlayout.addWidget(self.btnRandomize)
 		HBlayout.addWidget(self.btnNoise)
 		HBlayout.addWidget(self.btnSmooth)
+		HBlayout.addWidget(self.btnSharpen)
+		# HBlayout.addWidget(self.btnNormalize)
 		# HBlayout.addWidget(self.btnDeadLeaves)
 		# HBlayout.addWidget(self.btnImprove)
 		HBlayout.addWidget(self.btnSetLvl)
@@ -1556,6 +1581,8 @@ def getServer(ip='', port=8080):
 	server.register('randomize_grid')
 	server.register('noise')
 	server.register('smooth')
+	server.register('sharpen')
+	server.register('normalize')
 	server.register('deadLeaves')
 	connected = False
 	attempts = 0
