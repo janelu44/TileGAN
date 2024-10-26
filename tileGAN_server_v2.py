@@ -725,6 +725,30 @@ class TileGanManager:
         self._save_instance()
         return self.output, 0
 
+    def delete(self, pos_x, pos_y):
+        ls = self.latent_size
+        grid_h = self.intermediate_latent_grid.shape[2]
+        grid_w = self.intermediate_latent_grid.shape[3]
+
+        co = ls // 2
+
+        x_start = max(pos_x - co, 0)
+        y_start = max(pos_y - co, 0)
+        x_end = min(pos_x - co + ls, grid_w)
+        y_end = min(pos_y - co + ls, grid_h)
+
+        self.intermediate_latent_grid[:, :, y_start:y_end, x_start:x_end] = 0
+        roi = 2 * ls
+        self.calculate_output_image(
+            self.intermediate_latent_grid,
+            start=(max(y_start - roi, 0), max(x_start - roi, 0)),
+            end=(min(y_end + 2 * roi, grid_h), min(x_end + 2 * roi, grid_w)),
+            update_all=False
+        )
+
+        self._save_instance()
+        return self.output
+
     def set_merge_level(self, level, latent_size=-1):
         self.merge_level = level
         if latent_size < 0:
@@ -821,6 +845,7 @@ if __name__ == '__main__':
     server_process.register('get_cluster_at', manager.get_cluster_at)
     server_process.register('get_upsampled', manager.get_upsampled)
     server_process.register('put_latent', manager.put_latent)
+    server_process.register('delete', manager.delete)
     server_process.register('perturb_latent', manager.perturb_latent)
     server_process.register('paste_latents', manager.paste_latents)
     server_process.register('save_latents', manager.save_latents)

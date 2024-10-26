@@ -442,6 +442,8 @@ class ImageViewer(QtWidgets.QGraphicsView):
 		self.middleMouseButtonDown = False
 		self._panStart = QPoint(0, 0)
 
+		self.is_delete_clicked = False
+
 		#show tutorial on startup
 		tutorialPath = 'tileGAN_firstSteps.jpg'
 		self.updateImage(QtGui.QPixmap(tutorialPath), fitToView=True, updateUI=False)
@@ -535,8 +537,10 @@ class ImageViewer(QtWidgets.QGraphicsView):
 
 				modifiers = QtGui.QGuiApplication.keyboardModifiers()
 
-				if self.latentCluster is not None:
+				if self.latentCluster is not None and not self.is_delete_clicked:
 					self.dropLatent(self.latentCluster, event.pos(), modifiers)
+				elif self.is_delete_clicked:
+					self.delete(event.pos())
 
 			self.imageClicked.emit(QtCore.QPoint(event.pos()))
 
@@ -624,7 +628,8 @@ class ImageViewer(QtWidgets.QGraphicsView):
 			painter.drawLine(QPointF(offset+halfSize, offset+halfSize-crossSize), QPointF(offset+halfSize, offset+halfSize+crossSize))
 			painter.drawLine(QPointF(offset+halfSize-crossSize, offset+halfSize), QPointF(offset+halfSize+crossSize, offset+halfSize))
 		r.adjust(-offset, -offset, -offset, -offset)
-		pen = QPen(QColor(styleColor[0], styleColor[1], styleColor[2], 200), stroke)
+		color = (255, 0, 0) if self.is_delete_clicked else styleColor
+		pen = QPen(QColor(color[0], color[1], color[2], 200), stroke)
 		painter.setPen(pen)
 		painter.drawRect(r)
 		if crossSize > 4:
@@ -749,6 +754,11 @@ class ImageViewer(QtWidgets.QGraphicsView):
 		self.undoCountUpdated.emit(undoCount)
 		self.updateImage(output)
 
+	def delete(self, pos):
+		gridCoords = self.getGridCoords(pos)
+		output = np.asarray(tf_manager.delete(gridCoords.x(), gridCoords.y())._getvalue())
+		self.updateImage(output)
+
 	def replaceLatentRegion(self, startX, startY, width, height, sampleX, sampleY):#, x_target, y_target):
 		mode = 'similar' if self.useSimilarLatents else 'identical'
 		#mode = 'cluster' #if self.useSimilarLatents else 'identical'
@@ -861,6 +871,10 @@ class ImageViewer(QtWidgets.QGraphicsView):
 		self.undoCountUpdated.emit(undoCount)
 		self.updateGridShape(np.asarray(gridShape))
 		self.updateImage(np.asarray(output), fitToView=True)
+
+	def toggle_delete(self):
+		self.is_delete_clicked = not self.is_delete_clicked
+		self.btnDelete.setChecked(self.is_delete_clicked)
 
 	def deadLeaves(self):
 		"""
@@ -1195,11 +1209,11 @@ class MainWidget(QtWidgets.QWidget):
 		self.dataset = ''
 
 		# 'Load image' button
-		self.btnLoad = QToolButton(self)
-		self.btnLoad.setIcon(QtGui.QIcon(iconFolder + '/icon_upload.png'))
-		self.btnLoad.setToolTip('Open Image')
-		self.btnLoad.setIconSize(QSize(32, 32))
-		self.btnLoad.clicked.connect(self.loadImageDialog)
+		# self.btnLoad = QToolButton(self)
+		# self.btnLoad.setIcon(QtGui.QIcon(iconFolder + '/icon_upload.png'))
+		# self.btnLoad.setToolTip('Open Image')
+		# self.btnLoad.setIconSize(QSize(32, 32))
+		# self.btnLoad.clicked.connect(self.loadImageDialog)
 
 		self.btnSave = QToolButton(self)
 		icon = QIcon()
@@ -1226,16 +1240,16 @@ class MainWidget(QtWidgets.QWidget):
 		self.btnLoadLatents.setEnabled(True)
 		self.btnLoadLatents.clicked.connect(self.viewer.loadLatents)
 
-		self.btnUndo = QToolButton(self)
-		icon = QIcon()
-		icon.addPixmap(QPixmap(iconFolder + '/icon_undo.png'), QIcon.Normal)
-		icon.addPixmap(QPixmap(iconFolder + '/icon_undo_disabled.png'), QIcon.Disabled)
-		self.btnUndo.setIcon(icon)
-		self.btnUndo.setToolTip('Undo')
-		self.btnUndo.setEnabled(False)
-		self.btnUndo.setIconSize(QSize(32, 32))
-		self.btnUndo.clicked.connect(self.viewer.undo)
-		self.viewer.undoCountUpdated.connect(self.setUndoEnabled)
+		# self.btnUndo = QToolButton(self)
+		# icon = QIcon()
+		# icon.addPixmap(QPixmap(iconFolder + '/icon_undo.png'), QIcon.Normal)
+		# icon.addPixmap(QPixmap(iconFolder + '/icon_undo_disabled.png'), QIcon.Disabled)
+		# self.btnUndo.setIcon(icon)
+		# self.btnUndo.setToolTip('Undo')
+		# self.btnUndo.setEnabled(False)
+		# self.btnUndo.setIconSize(QSize(32, 32))
+		# self.btnUndo.clicked.connect(self.viewer.undo)
+		# self.viewer.undoCountUpdated.connect(self.setUndoEnabled)
 
 		self.btnRandomize = QToolButton(self)
 		self.btnRandomize.setIcon(QtGui.QIcon(iconFolder + '/icon_randomize.png'))
@@ -1243,17 +1257,17 @@ class MainWidget(QtWidgets.QWidget):
 		self.btnRandomize.setToolTip('Randomize')
 		self.btnRandomize.clicked.connect(self.viewer.randomize)
 
-		self.btnDeadLeaves = QToolButton(self)
-		self.btnDeadLeaves.setIcon(QtGui.QIcon(iconFolder + '/icon_randomize_regions.png'))
-		self.btnDeadLeaves.setIconSize(QSize(32, 32))
-		self.btnDeadLeaves.setToolTip('Randomize larger regions')
-		self.btnDeadLeaves.clicked.connect(self.viewer.deadLeaves)
+		# self.btnDeadLeaves = QToolButton(self)
+		# self.btnDeadLeaves.setIcon(QtGui.QIcon(iconFolder + '/icon_randomize_regions.png'))
+		# self.btnDeadLeaves.setIconSize(QSize(32, 32))
+		# self.btnDeadLeaves.setToolTip('Randomize larger regions')
+		# self.btnDeadLeaves.clicked.connect(self.viewer.deadLeaves)
 
-		self.btnRefresh = QToolButton(self)
-		self.btnRefresh.setIcon(QtGui.QIcon(iconFolder + '/icon_refresh.png'))
-		self.btnRefresh.setIconSize(QSize(32, 32))
-		self.btnRefresh.setToolTip('Refresh')
-		self.btnRefresh.clicked.connect(self.viewer.refresh)
+		# self.btnRefresh = QToolButton(self)
+		# self.btnRefresh.setIcon(QtGui.QIcon(iconFolder + '/icon_refresh.png'))
+		# self.btnRefresh.setIconSize(QSize(32, 32))
+		# self.btnRefresh.setToolTip('Refresh')
+		# self.btnRefresh.clicked.connect(self.viewer.refresh)
 
 		self.btnSetLvl = QToolButton(self)
 		self.btnSetLvl.setIcon(QtGui.QIcon(iconFolder + '/icon_merge_level.png'))
@@ -1279,24 +1293,35 @@ class MainWidget(QtWidgets.QWidget):
 		self.btnSharpen.setToolTip('Sharpen')
 		self.btnSharpen.clicked.connect(self.viewer.sharpen)
 
-		self.btnNormalize = QToolButton(self)
-		self.btnNormalize.setIcon(QtGui.QIcon(iconFolder + '/icon_refresh.png'))
-		self.btnNormalize.setIconSize(QSize(32, 32))
-		self.btnNormalize.setToolTip('Normalize')
-		self.btnNormalize.clicked.connect(self.viewer.normalize)
+		# self.btnNormalize = QToolButton(self)
+		# self.btnNormalize.setIcon(QtGui.QIcon(iconFolder + '/icon_refresh.png'))
+		# self.btnNormalize.setIconSize(QSize(32, 32))
+		# self.btnNormalize.setToolTip('Normalize')
+		# self.btnNormalize.clicked.connect(self.viewer.normalize)
 
-		self.btnMerged = QToolButton(self)
-		self.btnMerged.setCheckable(True)
-		self.btnMerged.setEnabled(False)
-		self.btnMerged.setChecked(True)
+		self.btnDelete = QToolButton(self)
+		self.btnDelete.setCheckable(True)
+		self.btnDelete.setChecked(False)
 		icon = QIcon()
-		icon.addPixmap(QPixmap(iconFolder + '/icon_merged_disabled.png'), QIcon.Disabled)
-		icon.addPixmap(QPixmap(iconFolder + '/icon_merged.png'), QIcon.Normal, QIcon.On)
-		icon.addPixmap(QPixmap(iconFolder + '/icon_unmerged.png'), QIcon.Normal, QIcon.Off)
-		self.btnMerged.setIcon(icon)
-		self.btnMerged.setToolTip('Toggle merging')
-		self.btnMerged.setIconSize(QSize(32, 32))
-		self.btnMerged.toggled.connect(self.viewer.toggleMerging)
+		icon.addPixmap(QPixmap(iconFolder + '/icon_grid_disabled.png'), QIcon.Normal, QIcon.Off)
+		icon.addPixmap(QPixmap(iconFolder + '/icon_grid_off.png'), QIcon.Normal, QIcon.On)
+		self.btnDelete.setIcon(icon)
+		self.btnDelete.setIconSize(QSize(32, 32))
+		self.btnDelete.setToolTip('Delete')
+		self.btnDelete.clicked.connect(self.viewer.toggle_delete)
+
+		# self.btnMerged = QToolButton(self)
+		# self.btnMerged.setCheckable(True)
+		# self.btnMerged.setEnabled(False)
+		# self.btnMerged.setChecked(True)
+		# icon = QIcon()
+		# icon.addPixmap(QPixmap(iconFolder + '/icon_merged_disabled.png'), QIcon.Disabled)
+		# icon.addPixmap(QPixmap(iconFolder + '/icon_merged.png'), QIcon.Normal, QIcon.On)
+		# icon.addPixmap(QPixmap(iconFolder + '/icon_unmerged.png'), QIcon.Normal, QIcon.Off)
+		# self.btnMerged.setIcon(icon)
+		# self.btnMerged.setToolTip('Toggle merging')
+		# self.btnMerged.setIconSize(QSize(32, 32))
+		# self.btnMerged.toggled.connect(self.viewer.toggleMerging)
 
 		self.btnClusters = QToolButton(self)
 		self.btnClusters.setCheckable(True)
@@ -1311,34 +1336,34 @@ class MainWidget(QtWidgets.QWidget):
 		self.btnClusters.setIconSize(QSize(32, 32))
 		self.btnClusters.toggled.connect(self.viewer.toggleClusters)
 
-		self.btnImprove = QToolButton(self)
-		self.btnImprove.setIcon(QtGui.QIcon(iconFolder + '/icon_fix.png'))
-		self.btnImprove.setIconSize(QSize(32, 32))
-		self.btnImprove.setToolTip('Improve')
-		self.btnImprove.clicked.connect(self.viewer.improveResults)
+		# self.btnImprove = QToolButton(self)
+		# self.btnImprove.setIcon(QtGui.QIcon(iconFolder + '/icon_fix.png'))
+		# self.btnImprove.setIconSize(QSize(32, 32))
+		# self.btnImprove.setToolTip('Improve')
+		# self.btnImprove.clicked.connect(self.viewer.improveResults)
 
-		self.btnResize = QToolButton(self)
-		icon = QIcon()
-		icon.addPixmap(QPixmap(iconFolder + '/icon_image_resize_disabled.png'), QIcon.Disabled)
-		icon.addPixmap(QPixmap(iconFolder + '/icon_image_resize.png'))
-		self.btnResize.setIcon(icon)
-		self.btnResize.setIconSize(QSize(32, 32))
-		self.btnResize.setEnabled(False)
-		self.btnResize.setToolTip('Resize Guidance Map')
-		self.btnResize.clicked.connect(self.viewer.resizeGuidanceMap)
+		# self.btnResize = QToolButton(self)
+		# icon = QIcon()
+		# icon.addPixmap(QPixmap(iconFolder + '/icon_image_resize_disabled.png'), QIcon.Disabled)
+		# icon.addPixmap(QPixmap(iconFolder + '/icon_image_resize.png'))
+		# self.btnResize.setIcon(icon)
+		# self.btnResize.setIconSize(QSize(32, 32))
+		# self.btnResize.setEnabled(False)
+		# self.btnResize.setToolTip('Resize Guidance Map')
+		# self.btnResize.clicked.connect(self.viewer.resizeGuidanceMap)
 
-		self.btnGuidance = QToolButton(self)
-		self.btnGuidance.setCheckable(True)
-		icon = QIcon()
-		icon.addPixmap(QPixmap(iconFolder + '/icon_image_disabled.png'), QIcon.Disabled)
-		icon.addPixmap(QPixmap(iconFolder + '/icon_image.png'), QIcon.Normal, QIcon.On)
-		icon.addPixmap(QPixmap(iconFolder + '/icon_image_off.png'), QIcon.Normal, QIcon.Off)
-		self.btnGuidance.setIcon(icon)
-		self.btnGuidance.setIconSize(QSize(32, 32))
-		self.btnGuidance.setChecked(True)
-		self.btnGuidance.setEnabled(False)
-		self.btnGuidance.setToolTip('Show Guidance Map')
-		self.btnGuidance.toggled.connect(self.viewer.toggleGuidanceMap)
+		# self.btnGuidance = QToolButton(self)
+		# self.btnGuidance.setCheckable(True)
+		# icon = QIcon()
+		# icon.addPixmap(QPixmap(iconFolder + '/icon_image_disabled.png'), QIcon.Disabled)
+		# icon.addPixmap(QPixmap(iconFolder + '/icon_image.png'), QIcon.Normal, QIcon.On)
+		# icon.addPixmap(QPixmap(iconFolder + '/icon_image_off.png'), QIcon.Normal, QIcon.Off)
+		# self.btnGuidance.setIcon(icon)
+		# self.btnGuidance.setIconSize(QSize(32, 32))
+		# self.btnGuidance.setChecked(True)
+		# self.btnGuidance.setEnabled(False)
+		# self.btnGuidance.setToolTip('Show Guidance Map')
+		# self.btnGuidance.toggled.connect(self.viewer.toggleGuidanceMap)
 
 		self.viewer.guidanceUpdated.connect(self.setGuidanceEnabled)
 
@@ -1375,24 +1400,24 @@ class MainWidget(QtWidgets.QWidget):
 		self.btnIndicator.setChecked(True)
 		self.btnIndicator.toggled.connect(self.viewer.toggleLatentIndicator)
 
-		self.btnGrid = QToolButton(self)
-		self.btnGrid.setCheckable(True)
-		icon = QIcon()
-		icon.addPixmap(QPixmap(iconFolder + '/icon_grid_disabled.png'), QIcon.Disabled)
-		icon.addPixmap(QPixmap(iconFolder + '/icon_grid_off.png'), QIcon.Normal, QIcon.Off)
-		icon.addPixmap(QPixmap(iconFolder + '/icon_grid.png'), QIcon.Normal, QIcon.On)
-		self.btnGrid.setIcon(icon)
-		self.btnGrid.setIconSize(QSize(32, 32))
-		self.btnGrid.setToolTip('Show grid')
-		self.btnGrid.setChecked(False)
-		self.btnGrid.setEnabled(False)
-		self.btnGrid.toggled.connect(self.viewer.toggleGrid)
+		# self.btnGrid = QToolButton(self)
+		# self.btnGrid.setCheckable(True)
+		# icon = QIcon()
+		# icon.addPixmap(QPixmap(iconFolder + '/icon_grid_disabled.png'), QIcon.Disabled)
+		# icon.addPixmap(QPixmap(iconFolder + '/icon_grid_off.png'), QIcon.Normal, QIcon.Off)
+		# icon.addPixmap(QPixmap(iconFolder + '/icon_grid.png'), QIcon.Normal, QIcon.On)
+		# self.btnGrid.setIcon(icon)
+		# self.btnGrid.setIconSize(QSize(32, 32))
+		# self.btnGrid.setToolTip('Show grid')
+		# self.btnGrid.setChecked(False)
+		# self.btnGrid.setEnabled(False)
+		# self.btnGrid.toggled.connect(self.viewer.toggleGrid)
 
 		# Arrange layout
 		VBlayout = QVBoxLayout(self)
 
-		self.viewer.guidanceViewer = FloatViewer(self, QPoint(15, 15), preserveAspectRatio=True)
-		self.viewer.guidanceViewer.hide()
+		# self.viewer.guidanceViewer = FloatViewer(self, QPoint(15, 15), preserveAspectRatio=True)
+		# self.viewer.guidanceViewer.hide()
 
 		VBlayout.addWidget(self.viewer)
 		VBlayout.addWidget(self.latentPicker)
@@ -1406,6 +1431,7 @@ class MainWidget(QtWidgets.QWidget):
 		HBlayout.addWidget(self.btnNoise)
 		HBlayout.addWidget(self.btnSmooth)
 		HBlayout.addWidget(self.btnSharpen)
+		HBlayout.addWidget(self.btnDelete)
 		# HBlayout.addWidget(self.btnNormalize)
 		# HBlayout.addWidget(self.btnDeadLeaves)
 		# HBlayout.addWidget(self.btnImprove)
@@ -1420,7 +1446,7 @@ class MainWidget(QtWidgets.QWidget):
 		HBlayout.addWidget(self.infoTextBox)
 		HBlayout.addWidget(self.btnClusters)
 		# HBlayout.addWidget(self.btnMerged)
-		HBlayout.addWidget(self.btnGrid)
+		# HBlayout.addWidget(self.btnGrid)
 		HBlayout.addWidget(self.btnIndicator)
 		HBlayout.addWidget(self.btnLatents)
 
@@ -1567,6 +1593,7 @@ def getServer(ip='', port=8080):
 	server.register('get_dominant_cluster_colors')
 	server.register('get_upsampled')
 	server.register('put_latent')
+	server.register('delete')
 	server.register('perturb_latent')
 	server.register('get_output')
 	server.register('get_unmerged_output')
